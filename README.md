@@ -39,6 +39,12 @@ https://www.autohotkey.com/
 5. Comply with the on-screen instructions to set the script ready (first time only)
 6. Press the SOCD key to toggle and the menu key to open the settings menu
 
+### Windows SmartScreen Notice
+This app is unsigned, so Windows may show a blue “Protected your PC” screen.
+Click More info → Run anyway.
+The source code is available and clean.
+You can compile the ahk script itself if you don't trust the exe.
+
 ---
 
 ## Usage
