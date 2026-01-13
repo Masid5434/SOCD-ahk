@@ -77,7 +77,7 @@ These games may consider SOCD behavior as unauthorized input modification.
 This script is **not recommended for use in textboxes or typing fields**.
 
 The SOCD-AHK system works by duplicating and managing directional key events internally in order to correctly resolve conflicting inputs.  
-Because of this design, using the script while typing will result in **double characters**:
+Because of this design, using the script while typing will result in **double characters**.
 
 
 ---
@@ -127,7 +127,7 @@ Reduces input lag by capturing physical keys for SOCD detection instead of logic
 - ON: More Arcade-style feel on input may introduce lag on Weak Single-Core CPUs try compiling script or disablind it
 - OFF: More intent based detection system generally not recommended for pro play
 
-> Note: Compiling it usually has more effect on latency than Snappy Input Mode
+> Note: I was wrong Snappy Input mode has more effect than compiling it. But compiling on weaker hardware is still recommended.
 
 ---
 
@@ -140,7 +140,7 @@ When enabled:
 
 This closely mimics real SOCD hardware behavior.
 
-### WARNING: IT'S VERY UNSTABLE USING MODES OTHER THAN LAST INPUT MODE!
+### IT WORKS AS OF VERSION 1.0.2 ANYTHING BEFORE = GARBAGE
 
 ---
 
