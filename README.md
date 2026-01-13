@@ -57,13 +57,20 @@ Use this for:
 - Competitive keyboard input testing
 - Custom control systems
 
-## ⚠️ Important Notice
+## ⚠️ Important Notice - Bannable offense
 
 Do **NOT** use this script in competitive online games such as:
 - Valorant  
 - CS:GO / CS2  
 
 These games may consider SOCD behavior as unauthorized input modification.
+
+## ⚠️ Important Notice 2 – Text Input
+
+This script is **not recommended for use in textboxes or typing fields**.
+
+The SOCD-AHK system works by duplicating and managing directional key events internally in order to correctly resolve conflicting inputs.  
+Because of this design, using the script while typing will result in **double characters**:
 
 
 ---
