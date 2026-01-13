@@ -394,10 +394,10 @@ HandleSplitH(key, isDown) {
 
     opp := (key = "a") ? "d" : "a"
 
-    ; Detect conflict FIRST
+    ; ===== Conflict detection =====
     if (physicalKeys[key] && physicalKeys[opp]) {
 
-        ; === LAST INPUT WINS ===
+        ; 1 = Last input wins
         if (overrideMode = 1 && isDown) {
             if (currentSOD_H != "")
                 Send("{" currentSOD_H " up}")
@@ -407,13 +407,15 @@ HandleSplitH(key, isDown) {
             return
         }
 
-        else if (overrideMode = 2) { ; First input wins
-        ; Force-release the loser so OS doesn't keep it pressed
-            Send("{" key " up}")
+        ; 2 = First input wins
+        else if (overrideMode = 2) {
+            if (neutralizeMode && key != currentSOD_H)
+                Send("{" key " up}")
             UpdateDebugOSD()
             return
         }
-        ; === DISABLE BOTH ===
+
+        ; 3 = Disable both
         else if (overrideMode = 3) {
             if (currentSOD_H != "") {
                 Send("{" currentSOD_H " up}")
@@ -424,13 +426,13 @@ HandleSplitH(key, isDown) {
         }
     }
 
-    ; === WINNER LOCK (your special mode) ===
+    ; ===== Winner lock ONLY if neutralizeMode ON =====
     if (neutralizeMode && currentSOD_H != "" && isDown && key != currentSOD_H) {
         UpdateDebugOSD()
         return
     }
 
-    ; === NORMAL FLOW ===
+    ; ===== Normal flow (RESTORED from old code) =====
     if (isDown) {
         if (currentSOD_H != key) {
             if (currentSOD_H != "")
@@ -442,12 +444,22 @@ HandleSplitH(key, isDown) {
         if (currentSOD_H == key) {
             Send("{" key " up}")
             currentSOD_H := ""
+
+            ; 🔥 THIS IS THE LOST LINE THAT CAUSED EVERYTHING AHHHHHH
+            if (!neutralizeMode) {
+                for k in ["a","d"] {
+                    if (physicalKeys[k]) {
+                        currentSOD_H := k
+                        Send("{" k " down}")
+                        break
+                    }
+                }
+            }
         }
     }
 
     UpdateDebugOSD()
 }
-
 
 
 ; =========================
@@ -468,10 +480,12 @@ HandleSplitV(key, isDown) {
             UpdateDebugOSD()
             return
         }
+
         else if (overrideMode = 2) {
-            Send("{" key " up}")
+            if (neutralizeMode && key != currentSOD_V)
+                Send("{" key " up}")
             UpdateDebugOSD()
-        return
+            return
         }
 
         else if (overrideMode = 3) {
@@ -500,11 +514,21 @@ HandleSplitV(key, isDown) {
         if (currentSOD_V == key) {
             Send("{" key " up}")
             currentSOD_V := ""
+            if (!neutralizeMode) {
+                for k in ["w","s"] {
+                    if (physicalKeys[k]) {
+                        currentSOD_V := k
+                        Send("{" k " down}")
+                        break
+                    }
+                }
+            }
         }
     }
 
     UpdateDebugOSD()
 }
+
 
 
 
@@ -527,11 +551,14 @@ HandleUnifiedSOD(key, isDown) {
             UpdateDebugOSD()
             return
         }
+
         else if (overrideMode = 2) {
-            Send("{" key " up}")
+            if (neutralizeMode && key != currentSOD_All)
+                Send("{" key " up}")
             UpdateDebugOSD()
             return
         }
+
         else if (overrideMode = 3) {
             if (currentSOD_All != "") {
                 Send("{" currentSOD_All " up}")
@@ -558,14 +585,20 @@ HandleUnifiedSOD(key, isDown) {
         if (currentSOD_All == key) {
             Send("{" key " up}")
             currentSOD_All := ""
+            if (!neutralizeMode) {
+                for k in ["w","a","s","d"] {
+                    if (physicalKeys[k]) {
+                        currentSOD_All := k
+                        Send("{" k " down}")
+                        break
+                    }
+                }
+            }
         }
-    }
 
     UpdateDebugOSD()
+    }
 }
-
-
-
 
 
 
