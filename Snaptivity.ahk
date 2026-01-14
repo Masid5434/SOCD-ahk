@@ -112,6 +112,8 @@ global trayTipsEnabled := true
 ;tooltip
 global toolTipMap := Map()
 global lastTTCtrl := ""
+; Globalize this or wont run
+global cbDebug := ""
 
 OnMessage(0x200, WM_MOUSEMOVE)  ; 0x200 = WM_MOUSEMOVE
 
@@ -161,7 +163,7 @@ WM_MOUSEMOVE(wParam, lParam, msg, hwnd) {
 ; ======================================================
 
 global neutralizeMode := false
-global debugOverlay := false
+global debugOverlay := 0
 global menuToggleKey := ""
 global splitLanes := true   ; true = WS and AD separate, false = unified
 
@@ -213,7 +215,7 @@ debugGui.Hide()
 
 UpdateDebugOSD() {
     global debugOverlay, debugGui, physicalKeys, szodActive, splitLanes
-    global hudW, hudA, hudS, hudD
+    global hudW, hudA, hudS, hudD, hudX, hudY
     global currentSOD_H, currentSOD_V, currentSOD_All
 
     if (!debugOverlay) {
@@ -221,34 +223,76 @@ UpdateDebugOSD() {
         return
     }
 
-    SnaptivityColor  := "00FFFF"   ; cyan
-    physColor  := "00FF00"   ; green
-    idleColor  := "333333"   ; dark gray
+    SnaptivityColor := "00FFFF"   ; cyan
+    physColor       := "00FF00"   ; green
+    idleColor       := "333333"   ; dark gray
 
-    if (szodActive) {
-        if (splitLanes) {
-            ; Split-lane mode
-            hudW.Opt("c" (currentSOD_V = "w" ? SnaptivityColor : idleColor))
-            hudS.Opt("c" (currentSOD_V = "s" ? SnaptivityColor : idleColor))
-            hudA.Opt("c" (currentSOD_H = "a" ? SnaptivityColor : idleColor))
-            hudD.Opt("c" (currentSOD_H = "d" ? SnaptivityColor : idleColor))
-        } else {
-            ; Unified-lane mode
-            hudW.Opt("c" (currentSOD_All = "w" ? SnaptivityColor : idleColor))
-            hudA.Opt("c" (currentSOD_All = "a" ? SnaptivityColor : idleColor))
-            hudS.Opt("c" (currentSOD_All = "s" ? SnaptivityColor : idleColor))
-            hudD.Opt("c" (currentSOD_All = "d" ? SnaptivityColor : idleColor))
-        }
-    } else {
+    ; =========================
+    ; BASE LAYER
+    ; =========================
+    if (debugOverlay = 1 || debugOverlay = 3) {
         ; Physical mode
         hudW.Opt("c" (physicalKeys["w"] ? physColor : idleColor))
         hudA.Opt("c" (physicalKeys["a"] ? physColor : idleColor))
         hudS.Opt("c" (physicalKeys["s"] ? physColor : idleColor))
         hudD.Opt("c" (physicalKeys["d"] ? physColor : idleColor))
     }
+    else {
+        ; Logical-only base → idle background
+        hudW.Opt("c" idleColor)
+        hudA.Opt("c" idleColor)
+        hudS.Opt("c" idleColor)
+        hudD.Opt("c" idleColor)
+    }
+
+    ; =========================
+    ; LOGICAL LAYER
+    ; =========================
+    if (debugOverlay = 2 || debugOverlay = 3) {
+        if (szodActive) {
+            if (splitLanes) {
+                if (currentSOD_V = "w")
+                    hudW.Opt("c" SnaptivityColor)
+                if (currentSOD_V = "s")
+                    hudS.Opt("c" SnaptivityColor)
+
+                if (currentSOD_H = "a")
+                    hudA.Opt("c" SnaptivityColor)
+                if (currentSOD_H = "d")
+                    hudD.Opt("c" SnaptivityColor)
+            }
+            else {
+                if (currentSOD_All = "w")
+                    hudW.Opt("c" SnaptivityColor)
+                if (currentSOD_All = "a")
+                    hudA.Opt("c" SnaptivityColor)
+                if (currentSOD_All = "s")
+                    hudS.Opt("c" SnaptivityColor)
+                if (currentSOD_All = "d")
+                    hudD.Opt("c" SnaptivityColor)
+            }
+        }
+    }
+    ; =========================
+    ; 🥚 EASTER EGG MODE
+    ; Hold W + A + S + D together → GOD MODE PURPLE HUD
+    ; =========================
+    eggColor := "FF00FF"  ; purple chaos energy
+
+    if (physicalKeys["w"] && physicalKeys["a"] && physicalKeys["s"] && physicalKeys["d"]) {
+        hudW.Opt("c" eggColor)
+        hudA.Opt("c" eggColor)
+        hudS.Opt("c" eggColor)
+        hudD.Opt("c" eggColor)
+    }
+
 
     debugGui.Show("NoActivate x" hudX " y" hudY)
 }
+
+
+
+
 configDir := A_ScriptDir "\config"
 configFile := configDir "\Snaptivity.ini"
 
@@ -310,7 +354,7 @@ LoadConfig() {
     keySize := IniRead(configFile, "HUD", "KeySize", keySize)
 
     snappyMode := IniRead(configFile, "Settings", "SnappyMode", 1)
-    trayTipsEnabled := IniRead(configFile, "Settings", "TrayTips", 1)
+    trayTipsEnabled := IniRead(configFile, "Settings", "TrayTips", 1) + 0
 
     absUnifiedKey := IniRead(configFile, "AbsolutePriority", "Unified", "")
     absSplitHKey  := IniRead(configFile, "AbsolutePriority", "SplitH", "")
@@ -656,11 +700,10 @@ HandleSplitV(key, isDown) {
                         break
                     }
                 }
+            }
         }
     }
-
     UpdateDebugOSD()
-}
 }
 
 
@@ -753,20 +796,18 @@ HandleUnifiedSOD(key, isDown) {
             Send("{" key " up}")
             currentSOD_All := ""
             if (!neutralizeMode) {
-                for k in ["w","a","s","d"] {
+                for k in ["w","s"] {
                     if (physicalKeys[k]) {
                         currentSOD_All := k
                         Send("{" k " down}")
                         break
                     }
                 }
+            }
         }
     }
-
     UpdateDebugOSD()
 }
-}
-
 
 
 
@@ -935,7 +976,7 @@ SetMenuToggleKey(*) {
 ShowMenu() {
     global neutralizeMode, debugOverlay, splitLanes
     global trayTipsEnabled, snappyMode, overrideMode
-    global isResettingKey
+    global isResettingKey, cbDebug
     global absUnifiedKey, absSplitHKey, absSplitVKey
 
     global menuGui := Gui("+AlwaysOnTop -Caption +ToolWindow")
@@ -979,7 +1020,7 @@ ShowMenu() {
     cbTray.Value := !trayTipsEnabled
     cbTray.OnEvent("Click", (*) => (
         trayTipsEnabled := !cbTray.Value,
-    SaveConfig()
+        SaveConfig()
     ))
 
     ; Snappy mode
@@ -1012,13 +1053,25 @@ ShowMenu() {
         SaveConfig()
     ))
 
-
-    ; Debug HUD
+    ; debug overlay updated
     cbDebug := menu.AddCheckbox("c00FF00 w300", "🧪 Show WASD HUD Overlay")
-    cbDebug.Value := debugOverlay
+
+    ; checkbox is ON for both ON and ULTRA
+    cbDebug.Value := (debugOverlay != 0)
+
     cbDebug.OnEvent("Click", (*) => (
-        debugOverlay := cbDebug.Value,
-        UpdateDebugOSD()
+        debugOverlay := Mod(debugOverlay + 1, 4),   
+        cbDebug.Value := (debugOverlay != 0),
+
+        ShowTrayTip(
+            "DEBUG HUD",
+            debugOverlay = 0 ? "HUD: OFF" :
+            debugOverlay = 1 ? "HUD: ON" :
+                            "HUD: ULTRA MODE",
+            900
+        ),
+        UpdateDebugCheckboxStyle(),
+        UpdateDebugOSD(),
         SaveConfig()
     ))
 
@@ -1074,6 +1127,7 @@ ShowMenu() {
 
     ; SHOW MENU FIRST
     menu.Show("AutoSize Center")
+    UpdateDebugCheckboxStyle()
 
     OverrideModeChanged({Value: overrideMode})
     
@@ -1270,7 +1324,7 @@ OverrideModeChanged(ctrl, *) {
 
 
 
-ShowTrayTip(title, text, time := 800) {
+ShowTrayTip(title, text, time := 300) {
     global trayTipsEnabled
     if (trayTipsEnabled)
         TrayTip(title, text, time)
@@ -1353,4 +1407,28 @@ WM_LBUTTONDOWN(wParam, lParam, msg, hwnd) {
 WM_LBUTTONUP(wParam, lParam, msg, hwnd) {
     global dragArmed
     dragArmed := false
+}
+UpdateDebugCheckboxStyle() {
+    global cbDebug, debugOverlay
+
+    if (debugOverlay = 0) {
+        cbDebug.Value := 0
+        cbDebug.Opt("c777777")
+        cbDebug.Text := "🧪 Debug HUD (OFF)"
+    }
+    else if (debugOverlay = 1) {
+        cbDebug.Value := 1
+        cbDebug.Opt("c00FF00")
+        cbDebug.Text := "🧪 Debug HUD (PHYSICAL 🟢)"
+    }
+    else if (debugOverlay = 2) {
+        cbDebug.Value := 1
+        cbDebug.Opt("c00FFFF")
+        cbDebug.Text := "🧪 Debug HUD (LOGICAL 🔵)"
+    }
+    else if (debugOverlay = 3) {
+        cbDebug.Value := 1
+        cbDebug.Opt("cFF66FF")
+        cbDebug.Text := "🧪 Debug HUD (ULTRA ⚡)"
+    }
 }
