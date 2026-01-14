@@ -48,6 +48,20 @@ global absSplitVKey := ""
 ; Menu Gui
 global menuGui := ""
 
+; ===== Drag System =====
+global isDragging   := false
+global dragGui := ""
+global dragStartX := 0
+global dragStartY := 0
+global dragThreshold := 4
+global dragArmed := false
+global dragTitleHwnd := 0
+
+OnMessage(0x201, WM_LBUTTONDOWN) ; left button down
+OnMessage(0x202, WM_LBUTTONUP)   ; left button up
+OnMessage(0x201, WM_LBUTTONDOWN) ; WM_LBUTTONDOWN = 0x201
+
+
 ;special
 global isResettingKey := false
 
@@ -89,6 +103,7 @@ ShowEditOSD(msg, color := "00FFAA", duration := 4000) {
 ; 1 = Last input wins (default)
 ; 2 = First input wins
 ; 3 = Disable input on override
+; 4 = Absolute priority on one selected key (NEW)
 global overrideMode := 1
 ;snappy mode
 global snappyMode := true  ; true = raw overlap, false = intent-based
@@ -102,7 +117,11 @@ OnMessage(0x200, WM_MOUSEMOVE)  ; 0x200 = WM_MOUSEMOVE
 
 WM_MOUSEMOVE(wParam, lParam, msg, hwnd) {
     global toolTipMap, lastTTCtrl
+    global dragArmed, dragStartX, dragStartY, dragThreshold, dragGui
 
+    ; ======================
+    ; TOOLTIP SYSTEM
+    ; ======================
     MouseGetPos(, , &win, &ctrlHwnd, 2)
 
     if toolTipMap.Has(ctrlHwnd) {
@@ -114,7 +133,28 @@ WM_MOUSEMOVE(wParam, lParam, msg, hwnd) {
         ToolTip()
         lastTTCtrl := ""
     }
+
+    ; ======================
+    ; DRAG SYSTEM (MERGED)
+    ; ======================
+    if (!dragArmed)
+        return
+
+    if (!GetKeyState("LButton", "P")) {
+        dragArmed := false
+        return
+    }
+
+    MouseGetPos(&x, &y)
+    dx := Abs(x - dragStartX)
+    dy := Abs(y - dragStartY)
+
+    if (dx > dragThreshold || dy > dragThreshold) {
+        PostMessage(0xA1, 2,,, dragGui.Hwnd) ; WM_NCLBUTTONDOWN, HTCAPTION
+        dragArmed := false
+    }
 }
+
 
 ; ======================================================
 ; MENU TOGGLES
@@ -418,13 +458,14 @@ HandleSOD_V(key, isDown) {
 ; =========================
 HandleSplitH(key, isDown) {
     global physicalKeys, currentSOD_H, overrideMode, neutralizeMode
+    global absSplitHKey, snappyMode
 
+    ; Pair-logic opposite (A/D lane)
     opp := (key = "a") ? "d" : "a"
 
     ; ===== Conflict detection =====
-    if ( (snappyMode && physicalKeys[key] && physicalKeys[opp]) ;someone took my 2nd brain away and deleted this line and killed snappy mode aaaaaaaaaaaaaaaaaaaaaa
-    || (!snappyMode && isDown && physicalKeys[opp]) ) {
-
+    if ((snappyMode && physicalKeys[key] && physicalKeys[opp])
+     || (!snappyMode && isDown && physicalKeys[opp])) {
 
         ; 1 = Last input wins
         if (overrideMode = 1 && isDown) {
@@ -453,29 +494,46 @@ HandleSplitH(key, isDown) {
             UpdateDebugOSD()
             return
         }
-        if (overrideMode=4 && absSplitHKey!="" && (key="a"||key="d")) {
+
+        ; 4 = Absolute Priority Mode (Split H)
+        else if (overrideMode = 4 && absSplitHKey != "") {
             if (isDown) {
-                if (key=absSplitHKey) {
-                    if (currentSOD_H!="")
-                        Send("{" currentSOD_H " up}")
-                    currentSOD_H:=key
-                    Send("{" key " down}")
-                } else {
+                if (key != absSplitHKey) {
+                    ; illegal key, kill it
                     Send("{" key " up}")
+                    UpdateDebugOSD()
+                    return
+                } else {
+                    ; ABS key pressed → assert authority
+                    if (currentSOD_H != absSplitHKey) {
+                        if (currentSOD_H != "")
+                            Send("{" currentSOD_H " up}")
+
+                        currentSOD_H := absSplitHKey
+                        Send("{" absSplitHKey " down}")
+                        UpdateDebugOSD()
+                    }
+                    return
+                }
+            } else {
+                ; ABS released → clear SOD
+                if (key = absSplitHKey && currentSOD_H = absSplitHKey) {
+                    Send("{" absSplitHKey " up}")
+                    currentSOD_H := ""
+                    UpdateDebugOSD()
+                    return
                 }
             }
-            UpdateDebugOSD()
-            return
-        }
-    }   
+        }   
+    }
 
-    ; ===== Winner lock ONLY if neutralizeMode ON =====
+    ; ===== Winner lock =====
     if (neutralizeMode && currentSOD_H != "" && isDown && key != currentSOD_H) {
         UpdateDebugOSD()
         return
     }
 
-    ; ===== Normal flow (RESTORED from old code) =====
+    ; ===== Normal flow =====
     if (isDown) {
         if (currentSOD_H != key) {
             if (currentSOD_H != "")
@@ -487,17 +545,6 @@ HandleSplitH(key, isDown) {
         if (currentSOD_H == key) {
             Send("{" key " up}")
             currentSOD_H := ""
-
-            ; 🔥 THIS IS THE LOST LINE THAT CAUSED EVERYTHING AHHHHHH
-            if (!neutralizeMode) {
-                for k in ["a","d"] {
-                    if (physicalKeys[k]) {
-                        currentSOD_H := k
-                        Send("{" k " down}")
-                        break
-                    }
-                }
-            }
         }
     }
 
@@ -505,18 +552,21 @@ HandleSplitH(key, isDown) {
 }
 
 
+
 ; =========================
 ; SPLIT V
 ; =========================
 HandleSplitV(key, isDown) {
     global physicalKeys, currentSOD_V, overrideMode, neutralizeMode
+    global absSplitVKey, snappyMode
 
+    ; Pair-logic opposite (W/S lane)
     opp := (key = "w") ? "s" : "w"
 
-    if ( (snappyMode && physicalKeys[key] && physicalKeys[opp]) 
-    || (!snappyMode && isDown && physicalKeys[opp]) ) {
+    if ((snappyMode && physicalKeys[key] && physicalKeys[opp])
+     || (!snappyMode && isDown && physicalKeys[opp])) {
 
-
+        ; 1 = Last input wins
         if (overrideMode = 1 && isDown) {
             if (currentSOD_V != "")
                 Send("{" currentSOD_V " up}")
@@ -526,6 +576,7 @@ HandleSplitV(key, isDown) {
             return
         }
 
+        ; 2 = First input wins
         else if (overrideMode = 2) {
             if (neutralizeMode && key != currentSOD_V)
                 Send("{" key " up}")
@@ -533,6 +584,7 @@ HandleSplitV(key, isDown) {
             return
         }
 
+        ; 3 = Disable both
         else if (overrideMode = 3) {
             if (currentSOD_V != "") {
                 Send("{" currentSOD_V " up}")
@@ -541,21 +593,33 @@ HandleSplitV(key, isDown) {
             UpdateDebugOSD()
             return
         }
-        if (overrideMode=4 && absSplitVKey!="" && (key="w"||key="s")) {
+
+        ; 4 = Absolute Priority Mode (Split V)
+        else if (overrideMode = 4 && absSplitVKey != "") {
             if (isDown) {
-                if (key=absSplitVKey) {
-                    if (currentSOD_V!="")
-                        Send("{" currentSOD_V " up}")
-                    currentSOD_V:=key
-                    Send("{" key " down}")
-                } else {
+                if (key != absSplitVKey) {
                     Send("{" key " up}")
+                    UpdateDebugOSD()
+                    return
+                } else {
+                    if (currentSOD_V != absSplitVKey) {
+                        if (currentSOD_V != "")
+                            Send("{" currentSOD_V " up}")
+                        currentSOD_V := absSplitVKey
+                        Send("{" absSplitVKey " down}")
+                    }
+                    UpdateDebugOSD()
+                    return
+                }
+            } else {
+                if (key = absSplitVKey && currentSOD_V = absSplitVKey) {
+                    Send("{" absSplitVKey " up}")
+                    currentSOD_V := ""
+                    UpdateDebugOSD()
+                    return
                 }
             }
-            UpdateDebugOSD()
-            return
         }
-
     }
 
     if (neutralizeMode && currentSOD_V != "" && isDown && key != currentSOD_V) {
@@ -574,15 +638,6 @@ HandleSplitV(key, isDown) {
         if (currentSOD_V == key) {
             Send("{" key " up}")
             currentSOD_V := ""
-            if (!neutralizeMode) {
-                for k in ["w","s"] {
-                    if (physicalKeys[k]) {
-                        currentSOD_V := k
-                        Send("{" k " down}")
-                        break
-                    }
-                }
-            }
         }
     }
 
@@ -592,19 +647,25 @@ HandleSplitV(key, isDown) {
 
 
 
+
+
 ; =========================
 ; UNIFIED
 ; =========================
 HandleUnifiedSOD(key, isDown) {
-    global physicalKeys, currentSOD_All, overrideMode, neutralizeMode, snappyMode
+    global physicalKeys, currentSOD_All, overrideMode, neutralizeMode
+    global absUnifiedKey, snappyMode
 
-    opposites := Map("w","s","s","w","a","d","d","a")
-    opp := opposites[key]
+    opp := (key = "a") ? "d"
+         : (key = "d") ? "a"
+         : (key = "w") ? "s"
+         : (key = "s") ? "w"
+         : ""
 
-    ; ===== Conflict detection =====
-    if ( (snappyMode && physicalKeys[key] && physicalKeys[opp]) 
-      || (!snappyMode && isDown && physicalKeys[opp]) ) {
+    if ((snappyMode && physicalKeys[key] && physicalKeys[opp])
+     || (!snappyMode && isDown && physicalKeys[opp])) {
 
+        ; 1 = Last input wins
         if (overrideMode = 1 && isDown) {
             if (currentSOD_All != "")
                 Send("{" currentSOD_All " up}")
@@ -614,6 +675,7 @@ HandleUnifiedSOD(key, isDown) {
             return
         }
 
+        ; 2 = First input wins
         else if (overrideMode = 2) {
             if (neutralizeMode && key != currentSOD_All)
                 Send("{" key " up}")
@@ -621,6 +683,7 @@ HandleUnifiedSOD(key, isDown) {
             return
         }
 
+        ; 3 = Disable both
         else if (overrideMode = 3) {
             if (currentSOD_All != "") {
                 Send("{" currentSOD_All " up}")
@@ -630,32 +693,39 @@ HandleUnifiedSOD(key, isDown) {
             return
         }
 
+        ; 4 = Absolute Priority Mode (Unified)
         else if (overrideMode = 4 && absUnifiedKey != "") {
             if (isDown) {
-                if (key = absUnifiedKey) {
-                    if (currentSOD_All != "" && currentSOD_All != key)
-                        Send("{" currentSOD_All " up}")
-                    currentSOD_All := key
-                    Send("{" key " down}")
-                } else {
+                if (key != absUnifiedKey) {
                     Send("{" key " up}")
+                    UpdateDebugOSD()
+                    return
+                } else {
+                    if (currentSOD_All != absUnifiedKey) {
+                        if (currentSOD_All != "")
+                            Send("{" currentSOD_All " up}")
+                        currentSOD_All := absUnifiedKey
+                        Send("{" absUnifiedKey " down}")
+                    }
+                    UpdateDebugOSD()
+                    return
+                }
+            } else {
+                if (key = absUnifiedKey && currentSOD_All = absUnifiedKey) {
+                    Send("{" absUnifiedKey " up}")
+                    currentSOD_All := ""
+                    UpdateDebugOSD()
+                    return
                 }
             }
-            UpdateDebugOSD()
-            return
         }
-
-        UpdateDebugOSD()
-        return
     }
 
-    ; ===== Winner lock ONLY if neutralizeMode ON =====
     if (neutralizeMode && currentSOD_All != "" && isDown && key != currentSOD_All) {
         UpdateDebugOSD()
         return
     }
 
-    ; ===== Normal flow =====
     if (isDown) {
         if (currentSOD_All != key) {
             if (currentSOD_All != "")
@@ -667,20 +737,13 @@ HandleUnifiedSOD(key, isDown) {
         if (currentSOD_All == key) {
             Send("{" key " up}")
             currentSOD_All := ""
-            if (!neutralizeMode) {
-                for k in ["w","a","s","d"] {
-                    if (physicalKeys[k]) {
-                        currentSOD_All := k
-                        Send("{" k " down}")
-                        break
-                    }
-                }
-            }
         }
     }
 
     UpdateDebugOSD()
 }
+
+
 
 
 
@@ -850,6 +913,7 @@ ShowMenu() {
     global neutralizeMode, debugOverlay, splitLanes
     global trayTipsEnabled, snappyMode, overrideMode
     global isResettingKey
+    global absUnifiedKey, absSplitHKey, absSplitVKey
 
     global menuGui := Gui("+AlwaysOnTop -Caption +ToolWindow")
     menu := menuGui
@@ -860,6 +924,7 @@ ShowMenu() {
     ; ===== CUSTOM GAMER TITLE BAR (FLOW SAFE) =====
     titleBar := menu.AddText("w300 h30 Center c00FFFF", "🎮 Snaptivity CONTROL PANEL")
     titleBar.SetFont("s11 Bold")
+    OnMessage(0x201, WM_LBUTTONDOWN)
 
     ; 🔁 REBIND BUTTONS
     btnRebindSnaptivity := menu.AddText(
@@ -891,7 +956,7 @@ ShowMenu() {
     cbTray.Value := !trayTipsEnabled
     cbTray.OnEvent("Click", (*) => (
         trayTipsEnabled := !cbTray.Value,
-        SaveConfig()
+    SaveConfig()
     ))
 
     ; Snappy mode
@@ -913,6 +978,7 @@ ShowMenu() {
     global cbNeutral := menu.AddCheckbox("c00FFAA w300", "🔥 Lock Winner Opposites (W+S / A+D)")
     cbNeutral.Value := neutralizeMode
     cbNeutral.OnEvent("Click", (*) => neutralizeMode := cbNeutral.Value)
+    SaveConfig()
 
     ; Split lanes
     cbSplit := menu.AddCheckbox("c00FFFF w300", "🧭 Split Direction Lanes (WS / AD)")
@@ -964,6 +1030,22 @@ ShowMenu() {
     absUnifiedDDL.Text := (absUnifiedKey = "" ? "None" : StrUpper(absUnifiedKey))
     absSplitHDDL.Text  := (absSplitHKey  = "" ? "None" : StrUpper(absSplitHKey))
     absSplitVDDL.Text  := (absSplitVKey  = "" ? "None" : StrUpper(absSplitVKey))
+
+    absUnifiedDDL.OnEvent("Change", (*) => (
+        absUnifiedKey := (absUnifiedDDL.Text = "None" ? "" : StrLower(absUnifiedDDL.Text)),
+        SaveConfig()
+    ))
+
+    absSplitHDDL.OnEvent("Change", (*) => (
+        absSplitHKey := (absSplitHDDL.Text = "None" ? "" : StrLower(absSplitHDDL.Text)),
+        SaveConfig()
+    ))
+
+
+    absSplitVDDL.OnEvent("Change", (*) => (
+        absSplitVKey := (absSplitVDDL.Text = "None" ? "" : StrLower(absSplitVDDL.Text)),
+        SaveConfig()
+    ))
 
 
 
@@ -1153,6 +1235,14 @@ OverrideModeChanged(ctrl, *) {
         absSplitVDDL.Visible := false
     }
     menuGui.Show("AutoSize")
+
+    ; Make sure that ABS values are not hallucinated by the UI
+    if (overrideMode = 4) {
+        absUnifiedDDL.Text := (absUnifiedKey = "" ? "None" : StrUpper(absUnifiedKey))
+        absSplitHDDL.Text  := (absSplitHKey  = "" ? "None" : StrUpper(absSplitHKey))
+        absSplitVDDL.Text  := (absSplitVKey  = "" ? "None" : StrUpper(absSplitVKey))
+    }
+
 }
 
 
@@ -1211,3 +1301,33 @@ EnableHotkeys() {
 }
 ; does anyone even read this
 ; why does copilot keep suggesting me 2... WHATS THE MEANING OF 2!
+StartDrag(guiObj) {
+    global dragArmed, dragStartX, dragStartY, dragGui
+
+    dragGui := guiObj
+    dragArmed := true
+
+    MouseGetPos(&mx, &my)
+    dragStartX := mx
+    dragStartY := my
+}
+
+
+WM_LBUTTONDOWN(wParam, lParam, msg, hwnd) {
+    global titleBar, menuGui
+    global dragArmed, dragStartX, dragStartY, dragGui
+
+    ; Only start drag if click was on the title bar
+    if (!IsSet(titleBar) || hwnd != titleBar.Hwnd)
+        return
+
+    dragGui := menuGui
+    dragArmed := true
+    MouseGetPos(&dragStartX, &dragStartY)
+}
+
+
+WM_LBUTTONUP(wParam, lParam, msg, hwnd) {
+    global dragArmed
+    dragArmed := false
+}
