@@ -541,10 +541,20 @@ HandleSplitH(key, isDown) {
             currentSOD_H := key
             Send("{" key " down}")
         }
-    } else {
+    } else { 
         if (currentSOD_H == key) {
             Send("{" key " up}")
             currentSOD_H := ""
+            ; 🔥 THIS IS THE LOST LINE THAT CAUSED EVERYTHING AHHHHHH
+            if (!neutralizeMode) {
+                for k in ["a","d"] {
+                    if (physicalKeys[k]) {
+                        currentSOD_H := k
+                        Send("{" k " down}")
+                        break
+                    }
+                }
+            }
         }
     }
 
@@ -638,12 +648,20 @@ HandleSplitV(key, isDown) {
         if (currentSOD_V == key) {
             Send("{" key " up}")
             currentSOD_V := ""
+            if (!neutralizeMode) {
+                for k in ["w","s"] {
+                    if (physicalKeys[k]) {
+                        currentSOD_V := k
+                        Send("{" k " down}")
+                        break
+                    }
+                }
         }
     }
 
     UpdateDebugOSD()
 }
-
+}
 
 
 
@@ -656,11 +674,8 @@ HandleUnifiedSOD(key, isDown) {
     global physicalKeys, currentSOD_All, overrideMode, neutralizeMode
     global absUnifiedKey, snappyMode
 
-    opp := (key = "a") ? "d"
-         : (key = "d") ? "a"
-         : (key = "w") ? "s"
-         : (key = "s") ? "w"
-         : ""
+    opposites := Map("w","s","s","w","a","d","d","a")
+    opp := opposites[key]
 
     if ((snappyMode && physicalKeys[key] && physicalKeys[opp])
      || (!snappyMode && isDown && physicalKeys[opp])) {
@@ -737,12 +752,20 @@ HandleUnifiedSOD(key, isDown) {
         if (currentSOD_All == key) {
             Send("{" key " up}")
             currentSOD_All := ""
+            if (!neutralizeMode) {
+                for k in ["w","a","s","d"] {
+                    if (physicalKeys[k]) {
+                        currentSOD_All := k
+                        Send("{" k " down}")
+                        break
+                    }
+                }
         }
     }
 
     UpdateDebugOSD()
 }
-
+}
 
 
 
