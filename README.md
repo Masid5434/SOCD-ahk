@@ -32,7 +32,7 @@ https://www.autohotkey.com/
 
 ## Installation
 
-1. Get a release from https://github.com/Masid5434/Snaptivity/releases
+1. Get a release from https://github.com/Ncoder-official/Snaptivity/releases
 2. Unzip the zip file
 3. Run `Compiled\Snaptivity.zip` or `SOCD.ahk` based on your needs
 4. The script will create a `config` folder inside `SOCD.ini`
